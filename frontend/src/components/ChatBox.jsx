@@ -1,68 +1,225 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from 'react';
+import './ChatBox.css';
 
 export default function ChatBox() {
-  const [prompt, setPrompt] = useState("");
-  const [response, setResponse] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [conversations, setConversations] = useState([]);
+  const [activeConvId, setActiveConvId] = useState(null);
+  const [prompt, setPrompt] = useState('');
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const responseEndRef = useRef(null);
 
+  // Auto-scroll to bottom
+  useEffect(() => {
+    responseEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [conversations, activeConvId]);
+
+  // Get active conversation
+  const activeConv = conversations.find(c => c.id === activeConvId);
+
+  // Handle submit
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setResponse("");
-    setIsLoading(true);
+    if (!prompt.trim() || isStreaming) return;
 
-    const apiUrl = "http://127.0.0.1:8000/chat/stream"; // FastAPI backend URL
+    let convId = activeConvId;
+
+    // Create new conversation if none active
+    if (!convId) {
+      const newConv = {
+        id: Date.now(),
+        prompt: prompt,
+        response: '',
+        timestamp: new Date().toISOString()
+      };
+      setConversations([newConv, ...conversations]);
+      convId = newConv.id;
+      setActiveConvId(convId);
+    } else {
+      // Update existing conversation prompt
+      setConversations(prev =>
+        prev.map(c =>
+          c.id === convId ? { ...c, prompt: prompt, response: '' } : c
+        )
+      );
+    }
+
+    setIsStreaming(true);
 
     try {
-      const res = await fetch(apiUrl, {
+      const res = await fetch("http://127.0.0.1:8000/chat/stream", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: new URLSearchParams({ prompt }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
       });
 
-      if (!res.body) throw new Error("No response body");
+      if (!res.body) {
+        throw new Error("No response stream found");
+      }
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder("utf-8");
-      let done = false;
 
-      while (!done) {
-        const { value, done: doneReading } = await reader.read();
-        done = doneReading;
-        const chunkValue = decoder.decode(value);
-        setResponse((prev) => prev + chunkValue);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value, { stream: true });
+        
+        // Update conversation with streaming response
+        setConversations(prev =>
+          prev.map(c =>
+            c.id === convId ? { ...c, response: (c.response || '') + chunk } : c
+          )
+        );
       }
-    } catch (err) {
-      console.error(err);
-      setResponse("Error connecting to API");
+    } catch (error) {
+      console.error('Error:', error);
+      setConversations(prev =>
+        prev.map(c =>
+          c.id === convId 
+            ? { ...c, response: '⚠️ Something went wrong. Check console for details.' } 
+            : c
+        )
+      );
     } finally {
-      setIsLoading(false);
+      setIsStreaming(false);
+      setPrompt('');
     }
   };
 
-  return (
-    <div className="bg-white rounded-2xl shadow-lg p-6 w-full max-w-2xl">
-      <form onSubmit={handleSubmit} className="flex mb-4">
-        <input
-          type="text"
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          placeholder="Ask me anything..."
-          className="flex-1 border rounded-l-lg p-3 focus:outline-none"
-        />
-        <button
-          type="submit"
-          disabled={isLoading}
-          className="bg-blue-600 text-white px-5 py-3 rounded-r-lg hover:bg-blue-700"
-        >
-          {isLoading ? "Thinking..." : "Send"}
-        </button>
-      </form>
+  // Create new chat
+  const newChat = () => {
+    setActiveConvId(null);
+    setPrompt('');
+  };
 
-      <div className="border rounded-lg p-4 bg-gray-50 min-h-[200px] whitespace-pre-wrap">
-        {response || "💬 The AI’s response will appear here..."}
-      </div>
+  // Get preview text
+  const getPreview = (conv) => {
+    if (!conv.prompt) return 'New conversation';
+    return conv.prompt.length > 45 
+      ? conv.prompt.substring(0, 45) + '...' 
+      : conv.prompt;
+  };
+
+  // Format time
+  const formatTime = (timestamp) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diff = now - date;
+    
+    if (diff < 86400000) { // Less than 24 hours
+      return date.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      });
+    }
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric' 
+    });
+  };
+
+  return (
+    <div className="chat-container">
+      {/* Sidebar */}
+      <aside className={`sidebar ${isSidebarOpen ? 'open' : 'closed'}`}>
+        <div className="sidebar-header">
+          <button onClick={newChat} className="new-chat-btn">
+            <span className="icon">+</span>
+            New Chat
+          </button>
+        </div>
+
+        <div className="history-list">
+          <h3 className="history-title">RECENT CHATS</h3>
+          {conversations.length === 0 ? (
+            <div className="empty-history">
+              <p>No conversations yet</p>
+            </div>
+          ) : (
+            conversations.map(conv => (
+              <div
+                key={conv.id}
+                className={`history-item ${conv.id === activeConvId ? 'active' : ''}`}
+                onClick={() => setActiveConvId(conv.id)}
+              >
+                <div className="history-preview">{getPreview(conv)}</div>
+                <div className="history-time">{formatTime(conv.timestamp)}</div>
+              </div>
+            ))
+          )}
+        </div>
+      </aside>
+
+      {/* Main Chat Area */}
+      <main className="main-chat">
+        {/* Toggle Button */}
+        <button
+          className="toggle-sidebar"
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          title={isSidebarOpen ? 'Close sidebar' : 'Open sidebar'}
+        >
+          <span>{isSidebarOpen ? '◀' : '▶'}</span>
+        </button>
+
+        {/* Messages */}
+        <div className="messages-area">
+          {activeConv ? (
+            <>
+              {activeConv.prompt && (
+                <div className="message-bubble user-bubble">
+                  <div className="bubble-content">{activeConv.prompt}</div>
+                </div>
+              )}
+
+              {activeConv.response && (
+                <div className="message-bubble ai-bubble">
+                  <div className="bubble-content">
+                    <pre className="response-text">{activeConv.response}</pre>
+                  </div>
+                </div>
+              )}
+
+              {isStreaming && activeConv.id === activeConvId && (
+                <div className="typing-indicator">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="welcome-screen">
+              <div className="welcome-icon">💬</div>
+              <h1>Groq Streaming Chat</h1>
+              <p>Start a conversation by typing your question below</p>
+            </div>
+          )}
+          <div ref={responseEndRef} />
+        </div>
+
+        {/* Input Form */}
+        <div className="input-area">
+          <form onSubmit={handleSubmit} className="input-form">
+            <input
+              type="text"
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder="Type your message here..."
+              className="prompt-input"
+              disabled={isStreaming}
+            />
+            <button
+              type="submit"
+              disabled={isStreaming}
+              className="submit-btn"
+            >
+              {isStreaming ? "Streaming..." : "Send"}
+            </button>
+          </form>
+        </div>
+      </main>
     </div>
   );
 }
