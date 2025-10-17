@@ -1,5 +1,5 @@
 # app/service/chat_management.py
-
+from fastapi.responses import JSONResponse
 from app.model.chat_models import chat
 from sqlalchemy.orm import Session
 from app.config.database import client
@@ -49,8 +49,9 @@ def get_all_chats(db: Session):
 
 def delete_chat_by_id(db: Session, chat_id: str):
     db_chat = db.query(chat).filter(chat.id == chat_id).first()
-    if not chat:
+    if not db_chat:
         return None
-    db.delete(db_chat)
-    db.commit()
-    return True
+    else:
+        db.delete(db_chat)
+        db.commit()
+        return True

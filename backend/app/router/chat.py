@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from typing import List
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from sqlalchemy.orm import Session 
 from uuid import uuid4
 from app.schemas.schema import chatRequest, chatResponse
@@ -32,21 +32,25 @@ async def chat_stream(request: chatRequest, background_task: BackgroundTasks, db
 
     def generate():
         nonlocal response
-        stream = stream_ai_response(prompt)
-        for chunk in stream():
-            response += chunk
-            yield chunk
-
+        try:
+            stream = stream_ai_response(prompt)
+            for chunk in stream():
+                response += chunk
+                yield chunk
+        except Exception as e:
+            raise HTTPException(status_code=401, detail="streaming failed")
 #  saving after streaming
+    try:
+        def save_chat():
+            if response.strip():
+                create_chat(db, prompt, response)
+        
+        background_task.add_task(save_chat)  
 
-    def save_chat():
-        if response.strip():
-            create_chat(db, prompt, response)
-    
-    background_task.add_task(save_chat)  
+        return StreamingResponse(generate(), media_type="text/markdown")
 
-    return StreamingResponse(generate(), media_type="text/markdown")
-
+    except:
+        raise HTTPException(status_code=401, detail="saving chat to database failed")
 
 
 # Get chat history by ID
