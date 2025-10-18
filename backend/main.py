@@ -4,7 +4,7 @@ from groq import Groq
 from dotenv import load_dotenv
 from app.router.chat import router
 from app.config.database import Base, engine
-from app.model.chat_models import chat
+from app.model.chat_models import ChatMessage
 
 import os 
 import json
