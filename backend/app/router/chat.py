@@ -86,15 +86,6 @@ async def chat_stream(session_id: int, request: ChatMessageCreate, background_ta
 # --------------------------------------------
 
 
-# Get chat history by ID
-
-
-'''@router.get("/chat/session/{session_id}/messages/", response_model=chatResponse)
-async def get_chat_history(chat_id: str, db: Session = Depends(get_db)):
-    chat = get_chat_by_id(db, chat_id)
-    if not chat:
-        raise HTTPException(status_code=404, detail="Chat history not available")
-    return chat'''
 
 
 @router.get("/chat/session/")
