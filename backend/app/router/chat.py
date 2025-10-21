@@ -5,8 +5,6 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from sqlalchemy.orm import Session 
 from uuid import uuid4
 from app.schemas.schema import (
-    # chatRequest, 
-    # chatResponse,
     ChatMessageBase,
     ChatMessageCreate,
     ChatMessageRead,
@@ -84,9 +82,7 @@ async def chat_stream(session_id: int, request: ChatMessageCreate, background_ta
 
 
 # --------------------------------------------
-
-
-
+# get session
 
 @router.get("/chat/session/")
 async def get_all_sessions(db: Session = Depends(get_db)):
