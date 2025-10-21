@@ -62,11 +62,11 @@ async def chat_stream(session_id: int, request: ChatMessageCreate, background_ta
                 yield chunk
         except Exception:
             raise HTTPException(status_code=401, detail="streaming failed")
-#  saving after streaming
+# ------------------------------- saving after streaming
     try:
         def save_chat():
             if response.strip():
-                # existing_chat = db.query(ChatSession).filter(ChatSession.prompt == prompt).first()
+
                 try:
                     create_chat_message(db, session_id, prompt, response)
                     print("chat message saved")
@@ -74,7 +74,7 @@ async def chat_stream(session_id: int, request: ChatMessageCreate, background_ta
                     print("Error saving chat message:", e)
                     db.rollback()
         background_task.add_task(save_chat)  
-            # save_chat()
+
         return StreamingResponse(generate(), media_type="text/markdown")
 
     except:
